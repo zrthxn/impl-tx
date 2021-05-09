@@ -4,7 +4,7 @@ understanding of the architecture and the internals.
 
 ## Setup
 
-Create a virtual environment and activate it
+Create a virtual environment and activate it.
 ```bash
 $ virtualenv tx -p python3
   created virtual environment CPython3.6.9.final.0-64 in 4451ms
@@ -18,5 +18,13 @@ $ source tx/bin/activate
 
 Install dependencies from the file.
 ```bash
-$ pip install -r requjrements.txt
+$ pip install -r requirements.txt
+```
+
+Download and extract data files.
+```bash
+$ wget -P data https://s3.amazonaws.com/opennmt-trainingdata/toy-ende.tar.gz
+
+# Extract gzipped tarball
+$ cd data && tar -xzf toy-ende.tar.gz
 ```
