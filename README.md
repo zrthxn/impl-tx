@@ -18,13 +18,13 @@ $ source tx/bin/activate
 
 Install dependencies from the file.
 ```bash
-$ pip install -r requirements.txt
+(tx) $ pip install -r requirements.txt
 ```
 
 Download and extract data files.
 ```bash
-$ wget -P data https://s3.amazonaws.com/opennmt-trainingdata/toy-ende.tar.gz
+(tx) $ wget -P data https://s3.amazonaws.com/opennmt-trainingdata/toy-ende.tar.gz
 
 # Extract gzipped tarball
-$ cd data && tar -xzf toy-ende.tar.gz
+(tx) $ cd data && tar -xzf toy-ende.tar.gz
 ```
