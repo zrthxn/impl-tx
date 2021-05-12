@@ -2,7 +2,9 @@ from typing import List
 
 
 defaults = {
-    "trainsplit": 0.6,
+    # Source and target languages, used by SpaCy
+    "src_lang": "en_core_web_trf",
+    "tgt_lang": "de_dep_news_trf",
     "holdout": 0.2,
 
     # Default config options for pyonmttok.Tokenizer
