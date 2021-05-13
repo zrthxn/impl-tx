@@ -1,6 +1,6 @@
 # Implement Transformer
 An attempt to implement a Transformer model in PyTorch, purely for the sake of deeper 
-understanding of the architecture and the internals.
+understanding of the architecture and the internals. **Definitely not for production use.**
 
 ## Setup
 
@@ -28,3 +28,10 @@ Download and extract data files.
 # Extract gzipped tarball
 (tx) $ cd data && tar -xzf toy-ende.tar.gz
 ```
+
+## Resources
+
+https://towardsdatascience.com/how-to-use-torchtext-for-neural-machine-translation-plus-hack-to-make-it-5x-faster-77f3884d95
+https://towardsdatascience.com/how-to-code-the-transformer-in-pytorch-24db27c8f9ec
+https://github.com/SamLynnEvans/Transformer
+https://www.youtube.com/watch?v=U0s0f995w14
