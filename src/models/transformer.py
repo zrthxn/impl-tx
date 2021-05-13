@@ -1,6 +1,6 @@
 import torch
-from math import sqrt
-from torch import nn, Tensor
+from math import cos, sin, sqrt
+from torch import nn, autograd, Tensor
 from config import defaults
 
 class MultiHeadAttention(nn.Module):
@@ -47,6 +47,32 @@ class MultiHeadAttention(nn.Module):
         return out
 
 
+class PositionalEncoder(nn.Module):
+    def __init__(self, emb_size: int, seq_length: int):
+        super().__init__()
+        self.emb_size = emb_size
+        
+        # create constant 'pe' matrix with values dependant on pos and i
+        pe = torch.zeros(seq_length, emb_size)
+        for pos in range(seq_length):
+            for i in range(0, emb_size, 2):
+                pe[pos, i] = sin(pos / (10000 ** ((2 * i)/emb_size)))
+                pe[pos, i + 1] = cos(pos / (10000 ** ((2 * (i + 1))/emb_size)))
+                
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+    
+    def forward(self, x):
+        # make embeddings relatively larger
+        x = x * sqrt(self.emb_size)
+
+        #add constant to embedding
+        seq_len = x.size(1)
+        
+        x = x + autograd.Variable(self.pe[:,:seq_len], requires_grad=False)
+        return x
+
+
 class EncoderBlock(nn.Module):
     def __init__(self, emb_size: int, heads: int, 
             dropout: float = defaults["transformer"]["encoder"]["dropout"], 
@@ -83,7 +109,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         
         self.inp_embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=emb_size)
-        self.pos_embedding = nn.Embedding(num_embeddings=seq_length, embedding_dim=emb_size)
+        self.pos_encoding = PositionalEncoder(emb_size=emb_size, seq_length=seq_length)
         
         self.layers = nn.ModuleList([
             EncoderBlock(emb_size, heads) for _ in range(layers)
@@ -92,10 +118,8 @@ class Encoder(nn.Module):
         self.dropout = nn.Dropout(defaults["transformer"]["encoder"]["dropout"])
 
     def forward(self, inputs, mask):
-        batch_len, seq_length = inputs.shape
-        position_encoding = torch.arange(0, seq_length).expand(batch_len, seq_length)
-
-        inputs = self.inp_embedding(inputs) + self.pos_embedding(position_encoding)
+        inputs = self.inp_embedding(inputs)
+        inputs = self.pos_encoding(inputs)
         inputs = self.dropout(inputs)
 
         for layer in self.layers:
@@ -146,7 +170,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         
         self.out_embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=emb_size)
-        self.pos_embedding = nn.Embedding(num_embeddings=seq_length, embedding_dim=emb_size)
+        self.pos_encoding = PositionalEncoder(emb_size=emb_size, seq_length=seq_length)
         
         self.layers = nn.ModuleList([
             DecoderBlock(emb_size, heads) for _ in range(layers)
@@ -156,10 +180,8 @@ class Decoder(nn.Module):
         self.dropout = nn.Dropout(defaults["transformer"]["decoder"]["dropout"])
 
     def forward(self, inputs, outputs, in_mask, out_mask):
-        batch_len, seq_length = outputs.shape
-        position_encoding = torch.arange(0, seq_length).expand(batch_len, seq_length)
-
-        outputs = self.out_embedding(outputs) + self.pos_embedding(position_encoding)
+        outputs = self.out_embedding(outputs)
+        outputs = self.pos_encoding(outputs)
         outputs = self.dropout(outputs)
 
         for layer in self.layers:
