@@ -1,34 +1,33 @@
 from logging import info
+
+import torch
 from config import defaults
 from src.pipelines import tokenization, dataset
 from torchtext.legacy.data.dataset import TabularDataset
 from torchtext.legacy.data.iterator import Iterator, batch
 
-def build_dataset(src_path, tgt_path):
+def build_dataset(src_path: str, tgt_path: str):
+    info('Building dataset')
     SOURCE = defaults["src_lang"]
     TARGET = defaults["tgt_lang"]
 
-    info('Building dataset')
-    src_tok, tgt_tok = tokenization.tokenizer_from(src_lang=SOURCE, tgt_lang=TARGET)
-    data_fields = [("src", src_tok), ("tgt", tgt_tok)]
+    src_vocab, tgt_vocab = tokenization.tokenizer_from(src_lang=SOURCE, tgt_lang=TARGET)
+    data_fields = [("src", src_vocab), ("tgt", tgt_vocab)]
 
-    tr, vl = dataset.from_raw_to_csv(src_path, tgt_path, columns=[SOURCE, TARGET])
-    train, valid = TabularDataset.splits(path='data', train=tr, validation=vl, format='csv', fields=data_fields)
+    train, valid = dataset.from_raw_to_csv(src_path, tgt_path, columns=[SOURCE, TARGET])
+    train, valid = TabularDataset.splits(path='data', train=train, validation=valid, format='csv', fields=data_fields)
     
-    src_tok.build_vocab(train, valid)
-    tgt_tok.build_vocab(train, valid)
+    src_vocab.build_vocab(train, valid)
+    tgt_vocab.build_vocab(train, valid)
     
     train_iter = FastIterator(train, batch_size=1300, batch_size_fn=batch_size_fn, train=True, 
-        sort_key= lambda x: (len(x.src), len(x.tgt)),
-        repeat=False, 
-        device=0, 
-        shuffle=True)
+        sort_key= lambda x: (len(x.src), len(x.tgt)), device=torch.device, 
+        repeat=False, shuffle=True)
 
     valid_iter = FastIterator(valid, batch_size=1300, batch_size_fn=batch_size_fn, train=False, 
-        sort_key= lambda x: (len(x.src), len(x.tgt)),
-        device=0)
+        sort_key= lambda x: (len(x.src), len(x.tgt)), device=torch.device)
 
-    return train_iter, valid_iter
+    return (src_vocab, tgt_vocab), (train_iter, valid_iter)
 
 
 # code from http://nlp.seas.harvard.edu/2018/04/03/attention.html 

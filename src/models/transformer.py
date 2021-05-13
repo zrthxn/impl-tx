@@ -1,6 +1,7 @@
 import torch
 from math import cos, sin, sqrt
 from torch import nn, autograd, Tensor
+from torchtext.vocab import Vocab
 from config import defaults
 
 class MultiHeadAttention(nn.Module):
@@ -82,7 +83,8 @@ class EncoderBlock(nn.Module):
 
         self.attention = MultiHeadAttention(emb_size, heads)
         self.feed_fwd = nn.Sequential(
-            nn.Linear(in_features=emb_size, out_features=expansion_size), nn.ReLU,
+            nn.Linear(in_features=emb_size, out_features=expansion_size), 
+            nn.ReLU(),
             nn.Linear(in_features=expansion_size, out_features=emb_size)
         )
         self.norm_a = nn.LayerNorm(emb_size)
@@ -138,7 +140,8 @@ class DecoderBlock(nn.Module):
         self.attention = MultiHeadAttention(emb_size, heads)
         self.masked_attention = MultiHeadAttention(emb_size, heads)
         self.feed_fwd = nn.Sequential(
-            nn.Linear(in_features=emb_size, out_features=expansion_size), nn.ReLU,
+            nn.Linear(in_features=emb_size, out_features=expansion_size), 
+            nn.ReLU(),
             nn.Linear(in_features=expansion_size, out_features=emb_size)
         )
 
@@ -192,15 +195,21 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, src_vocab_size: int, tgt_vocab_size: int, seq_length: int,
+    def __init__(self, 
+            src_vocab: Vocab, 
+            tgt_vocab: Vocab, 
+            seq_length: int,
             emb_size: int = defaults["transformer"]["emb_size"]):
         super(Transformer, self).__init__()
+
+        src_vocab_size = src_vocab.vocab.__len__()
+        tgt_vocab_size = tgt_vocab.vocab.__len__()
 
         self.encoder = Encoder(vocab_size=src_vocab_size, emb_size=emb_size, seq_length=seq_length)
         self.decoder = Decoder(vocab_size=tgt_vocab_size, emb_size=emb_size, seq_length=seq_length)
 
-        self.src_pad = 1
-        self.tgt_pad = 1
+        self.src_pad = src_vocab.vocab.stoi["<pad>"]
+        self.tgt_pad = tgt_vocab.vocab.stoi["<pad>"]
 
     def _src_mask(self, src):
         mask = (src != self.src_pad).unsqeeze(1).unsqueeze(2)

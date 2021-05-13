@@ -7,18 +7,19 @@ from src.preprocess import build_dataset
 from src.models import transformer, bert
 
 def main():
-	train, valid = build_dataset(
+	vocab, iters = build_dataset(
 		src_path="data/toy-ende/src-train.txt",
-		tgt_path="data/toy-ende/tgt-train.txt"
-	)
+		tgt_path="data/toy-ende/tgt-train.txt")
+
+	src_vocab, tgt_vocab = vocab
+	src_iters, tgt_iters = iters
 
 	Model = transformer.Transformer(
-		src_vocab_size=2,
-		tgt_vocab_size=2,
-		seq_length=2
-	)
+		src_vocab=src_vocab,
+		tgt_vocab=tgt_vocab,
+		seq_length=2)
 
-	Model = train_session(Model, train)
+	# Model = train_session(Model, train)
 
 if __name__ == "__main__":
 	logging.basicConfig(level=logging.INFO)

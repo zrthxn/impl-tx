@@ -7,7 +7,7 @@ from typing import Tuple
 
 
 def _load_lang(lang):
-    info(f'Loading spaCy pipeline for {lang}')
+    info(f'Loading SpaCy pipeline for {lang}')
     try:
         spacy.load(lang)
     except (OSError):
