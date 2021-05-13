@@ -18,7 +18,7 @@ def main():
 		seq_length=2
 	)
 
-	Model = train_session(Model, train, valid)
+	Model = train_session(Model, train)
 
 if __name__ == "__main__":
 	logging.basicConfig(level=logging.INFO)
