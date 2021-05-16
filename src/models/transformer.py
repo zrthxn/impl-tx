@@ -212,7 +212,7 @@ class Transformer(nn.Module):
         self.tgt_pad = tgt_vocab.vocab.stoi["<pad>"]
 
     def _src_mask(self, src):
-        mask = (src != self.src_pad).unsqeeze(1).unsqueeze(2)
+        mask = (src != self.src_pad).unsqeeze(1)
         return mask
 
     def _tgt_mask(self, tgt):
