@@ -2,10 +2,13 @@ from typing import List
 
 
 defaults = {
+    "dataset": "toy-ende",
     # Source and target languages, used by SpaCy
     "src_lang": "en_core_web_trf",
     "tgt_lang": "de_dep_news_trf",
     "holdout": 0.2,
+    "train_batchlen": 50,
+    "val_batchlen": 20,
 
     # Default config options for spacy.Tokenizer
     "tokenizer": {
@@ -73,7 +76,8 @@ def build_configuration(argv: List[str]):
     global defaults
     config = dict()
 
-    for arg in argv:
+    found = []
+    for i, arg in enumerate(argv):
         if arg.find("=") == -1:
             continue
         
@@ -81,8 +85,11 @@ def build_configuration(argv: List[str]):
         keys = name.split("-")
         
         config = tree_traverse(defaults, keys, value)
+        found.append(i)
 
     defaults = config
+    for i, _ in enumerate(found):
+        argv.pop(i)
 
 
 def tree_traverse(tree: dict, keys: List[str], value):
