@@ -42,6 +42,7 @@ defaults = {
     "transformer": {
         "emb_size": 512,
         "learning_rate": 2,
+        "seq_length": 10,
         "encoder" : {
             "num_layers": 6,
             "heads": 8,
@@ -73,6 +74,9 @@ def build_configuration(argv: List[str]):
     config = dict()
 
     for arg in argv:
+        if arg.find("=") == -1:
+            continue
+        
         name, value = arg.split("=")
         keys = name.split("-")
         

@@ -1,7 +1,9 @@
 import torch
-from math import cos, sin, sqrt
-from torch import nn, autograd, Tensor
+from math import cos, sin, sqrt, log
+from torch import nn, optim, Tensor
+from torch.autograd import Variable
 from torchtext.vocab import Vocab
+from pytorch_lightning import LightningModule
 from config import defaults
 
 class MultiHeadAttention(nn.Module):
@@ -20,7 +22,7 @@ class MultiHeadAttention(nn.Module):
 
         self.out = nn.Linear(in_features=self.emb_size, out_features=self.emb_size)
 
-    def forward(self, values: Tensor, keys: Tensor, queries: Tensor, mask):
+    def forward(self, values: Tensor, keys: Tensor, queries: Tensor, mask = None):
         # Split the K, V, Q tensors into self.heads pieces
         keys = keys.reshape(-1, keys.shape[1], self.heads, self.head_dim)
         values = values.reshape(-1, values.shape[1], self.heads, self.head_dim)
@@ -49,28 +51,25 @@ class MultiHeadAttention(nn.Module):
 
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, emb_size: int, seq_length: int):
+    def __init__(self, emb_size: int, maxlen: int = 5000):
         super().__init__()
         self.emb_size = emb_size
         
         # create constant 'pe' matrix with values dependant on pos and i
-        pe = torch.zeros(seq_length, emb_size)
-        for pos in range(seq_length):
-            for i in range(0, emb_size, 2):
-                pe[pos, i] = sin(pos / (10000 ** ((2 * i)/emb_size)))
-                pe[pos, i + 1] = cos(pos / (10000 ** ((2 * (i + 1))/emb_size)))
-                
-        pe = pe.unsqueeze(0)
+        pe = torch.zeros(maxlen, emb_size)
+        
+        position = torch.arange(0, maxlen, dtype=torch.float).unsqueeze(dim=1)
+        div_term = torch.exp(torch.arange(0, emb_size, 2).float() * (-log(10000.0) / emb_size))
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(dim=0).transpose(0, 1)
         self.register_buffer('pe', pe)
     
     def forward(self, x):
         # make embeddings relatively larger
         x = x * sqrt(self.emb_size)
-
-        #add constant to embedding
-        seq_len = x.size(1)
-        
-        x = x + autograd.Variable(self.pe[:,:seq_len], requires_grad=False)
+        x = x + Variable(self.pe[:x.size(0),:], requires_grad=False)
         return x
 
 
@@ -93,7 +92,7 @@ class EncoderBlock(nn.Module):
         self.attention_dropout = nn.Dropout(attention_dropout)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, embedding, mask):
+    def forward(self, embedding, mask = None):
         attention = self.attention(embedding, embedding, embedding, mask)
 
         norm1 = self.norm_a(attention + embedding)
@@ -111,7 +110,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         
         self.inp_embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=emb_size)
-        self.pos_encoding = PositionalEncoder(emb_size=emb_size, seq_length=seq_length)
+        self.pos_encoding = PositionalEncoder(emb_size=emb_size)
         
         self.layers = nn.ModuleList([
             EncoderBlock(emb_size, heads) for _ in range(layers)
@@ -119,7 +118,7 @@ class Encoder(nn.Module):
 
         self.dropout = nn.Dropout(defaults["transformer"]["encoder"]["dropout"])
 
-    def forward(self, inputs, mask):
+    def forward(self, inputs, mask = None):
         inputs = self.inp_embedding(inputs)
         inputs = self.pos_encoding(inputs)
         inputs = self.dropout(inputs)
@@ -152,7 +151,7 @@ class DecoderBlock(nn.Module):
         self.attention_dropout = nn.Dropout(attention_dropout)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, in_embedding, out_embedding, in_mask, out_mask):
+    def forward(self, in_embedding, out_embedding, in_mask = None, out_mask = None):
         out_attention = self.masked_attention(out_embedding, out_embedding, out_embedding, out_mask)
         query = self.outputs_norm(out_attention + out_embedding)
         query = self.attention_dropout(query)
@@ -173,7 +172,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         
         self.out_embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=emb_size)
-        self.pos_encoding = PositionalEncoder(emb_size=emb_size, seq_length=seq_length)
+        self.pos_encoding = PositionalEncoder(emb_size=emb_size)
         
         self.layers = nn.ModuleList([
             DecoderBlock(emb_size, heads) for _ in range(layers)
@@ -182,7 +181,7 @@ class Decoder(nn.Module):
         self.scale = nn.Linear(in_features=emb_size, out_features=seq_length)
         self.dropout = nn.Dropout(defaults["transformer"]["decoder"]["dropout"])
 
-    def forward(self, inputs, outputs, in_mask, out_mask):
+    def forward(self, inputs, outputs = None, in_mask = None, out_mask = None):
         outputs = self.out_embedding(outputs)
         outputs = self.pos_encoding(outputs)
         outputs = self.dropout(outputs)
@@ -194,37 +193,53 @@ class Decoder(nn.Module):
         return outputs
 
 
-class Transformer(nn.Module):
+class Transformer(LightningModule):
+    criterion = nn.CrossEntropyLoss()
+
     def __init__(self, 
             src_vocab: Vocab, 
             tgt_vocab: Vocab, 
-            seq_length: int,
+            seq_length: int = defaults["transformer"]["seq_length"],
             emb_size: int = defaults["transformer"]["emb_size"]):
-        super(Transformer, self).__init__()
+        super().__init__()
+        self.seq_length = seq_length
 
-        src_vocab_size = src_vocab.vocab.__len__()
-        tgt_vocab_size = tgt_vocab.vocab.__len__()
+        self.encoder = Encoder(vocab_size=len(src_vocab.vocab), emb_size=emb_size, seq_length=seq_length)
+        self.decoder = Decoder(vocab_size=len(tgt_vocab.vocab), emb_size=emb_size, seq_length=seq_length)
 
-        self.encoder = Encoder(vocab_size=src_vocab_size, emb_size=emb_size, seq_length=seq_length)
-        self.decoder = Decoder(vocab_size=tgt_vocab_size, emb_size=emb_size, seq_length=seq_length)
+        self.src_pad = Tensor(src_vocab.vocab.stoi["<pad>"])
+        self.tgt_pad = Tensor(tgt_vocab.vocab.stoi["<pad>"])
 
-        self.src_pad = src_vocab.vocab.stoi["<pad>"]
-        self.tgt_pad = tgt_vocab.vocab.stoi["<pad>"]
-
-    def _src_mask(self, src):
-        mask = (src != self.src_pad).unsqeeze(1)
-        return mask
-
-    def _tgt_mask(self, tgt):
-        batch, embed = tgt.shape
-        mask = torch.tril(torch.ones((embed, embed))).expand(batch, 1, embed, embed)
-        return mask
+        # Init Weights
+        # self.encoder.weight.data.uniform_(-0.1, 0.1)
+        # self.decoder.bias.data.zero_()
+        # self.decoder.weight.data.uniform_(-0.1, 0.1)
 
     def forward(self, src, tgt):
-        src_mask = self._src_mask(src)
-        tgt_mask = self._tgt_mask(tgt)
+        src_mask = (src != self.src_pad).unsqueeze(dim=1).unsqueeze(dim=2)
+
+        batch, embed = tgt.shape
+        tgt_mask = torch.tril(torch.ones((embed, embed))).expand(batch, 1, embed, embed)
 
         enc = self.encoder(src, src_mask)
         dec = self.decoder(enc, tgt, src_mask, tgt_mask)
 
         return dec
+
+    def configure_optimizers(self):
+        optimizer = optim.Adam(self.parameters(), lr=defaults["transformer"]["learning_rate"])
+        return optimizer
+
+    def training_step(self, batch, index):
+        vec, *sq = batch.src
+        src, tgt = vec.T, batch.tgt
+        # print(src, type(src))
+        # print(tgt, type(tgt))
+        out = self(src, tgt)
+
+        loss = self.criterion(out.view(-1, self.seq_length), tgt)
+        self.log('Loss/Train', loss)
+        return loss
+
+    # def validation_step(self, batch, index):
+    #     pass

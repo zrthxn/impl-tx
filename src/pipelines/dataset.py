@@ -1,10 +1,15 @@
 from logging import info
-from typing import List
-from config import defaults
-from sklearn.model_selection import train_test_split
-import pandas as pd
+from typing import List, Tuple
 
-def from_raw_to_csv(src_path: str, tgt_path: str, columns: List, equalize: bool = False):
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from torch.utils.data import Dataset, DataLoader
+from torchtext.legacy.data.dataset import TabularDataset
+from torchtext.legacy.data.field import Field
+
+from config import defaults
+
+def from_text(src_path: str, tgt_path: str, fields: List[Tuple[str, Field]], columns: List, equalize: bool = False):
     info('Reading dataset files')
     source = open(src_path, encoding='utf-8').read().split('\n')
     target = open(tgt_path, encoding='utf-8').read().split('\n')
@@ -30,4 +35,10 @@ def from_raw_to_csv(src_path: str, tgt_path: str, columns: List, equalize: bool 
     train.to_csv("data/train.csv", index=False)
     valid.to_csv("data/valid.csv", index=False)
 
-    return "train.csv", "valid.csv"
+    datasets = TabularDataset.splits(
+        path='data', 
+        format='csv', 
+        train='train.csv', validation='valid.csv', 
+        fields=fields)
+
+    return datasets

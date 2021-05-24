@@ -1,56 +1,57 @@
 from logging import info
-
-import torch
-from config import defaults
-from src.pipelines import tokenization, dataset
-from torchtext.legacy.data.dataset import TabularDataset
 from torchtext.legacy.data.iterator import Iterator, batch
+from torchtext.legacy.data import TabularDataset
+from torch.utils.data import DataLoader
 
-def build_dataset(src_path: str, tgt_path: str):
+from config import defaults
+from src.pipelines.tokenization import tokenizer_from
+from src.pipelines import dataset
+
+def build_dataset(src_path: str, tgt_path: str, ftype: str = "text"):
     info('Building dataset')
     SOURCE = defaults["src_lang"]
     TARGET = defaults["tgt_lang"]
 
-    src_vocab, tgt_vocab = tokenization.tokenizer_from(src_lang=SOURCE, tgt_lang=TARGET)
+    src_vocab, tgt_vocab = tokenizer_from(src_lang=SOURCE, tgt_lang=TARGET)
     data_fields = [("src", src_vocab), ("tgt", tgt_vocab)]
 
-    train, valid = dataset.from_raw_to_csv(src_path, tgt_path, columns=[SOURCE, TARGET])
-    train, valid = TabularDataset.splits(path='data', train=train, validation=valid, format='csv', fields=data_fields)
+    if ftype == "text":
+        train, valid = dataset.from_text(src_path, tgt_path, fields=data_fields, columns=[SOURCE, TARGET])
     
     src_vocab.build_vocab(train, valid)
     tgt_vocab.build_vocab(train, valid)
     
-    train_iter = FastIterator(train, batch_size=1300, batch_size_fn=batch_size_fn, train=True, 
-        sort_key= lambda x: (len(x.src), len(x.tgt)), device=torch.device, 
-        repeat=False, shuffle=True)
+    train_data = FastIterator(train, batch_size=200, 
+        train=True,
+        sort_key=lambda x: (len(x.src), len(x.tgt)))
+    
+    valid_data = FastIterator(valid, batch_size=100, 
+        sort_key=lambda x: (len(x.src), len(x.tgt)))
 
-    valid_iter = FastIterator(valid, batch_size=1300, batch_size_fn=batch_size_fn, train=False, 
-        sort_key= lambda x: (len(x.src), len(x.tgt)), device=torch.device)
-
-    return (src_vocab, tgt_vocab), (train_iter, valid_iter)
+    return (src_vocab, tgt_vocab), (train_data, valid_data)
 
 
 # code from http://nlp.seas.harvard.edu/2018/04/03/attention.html 
 # read text after for description of what it does
 global max_src_in_batch, max_tgt_in_batch
 
-def batch_size_fn(new, count, sofar):
-    "Keep augmenting batch and calculate total number of tokens + padding."
-    global max_src_in_batch, max_tgt_in_batch
-
-    if count == 1:
-        max_src_in_batch = 0
-        max_tgt_in_batch = 0
-
-    max_src_in_batch = max(max_src_in_batch,  len(new.src))
-    max_tgt_in_batch = max(max_tgt_in_batch,  len(new.tgt) + 2)
-
-    src_elements = count * max_src_in_batch
-    tgt_elements = count * max_tgt_in_batch
-
-    return max(src_elements, tgt_elements)
-
 class FastIterator(Iterator):
+    def batch_size_fn(new, count, sofar):
+        "Keep augmenting batch and calculate total number of tokens + padding."
+        global max_src_in_batch, max_tgt_in_batch
+
+        if count == 1:
+            max_src_in_batch = 0
+            max_tgt_in_batch = 0
+
+        max_src_in_batch = max(max_src_in_batch,  len(new.src))
+        max_tgt_in_batch = max(max_tgt_in_batch,  len(new.tgt) + 2)
+
+        src_elements = count * max_src_in_batch
+        tgt_elements = count * max_tgt_in_batch
+
+        return max(src_elements, tgt_elements)
+    
     def create_batches(self):
         if self.train:
             def pool(d, random_shuffler):

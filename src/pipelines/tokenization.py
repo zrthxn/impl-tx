@@ -1,7 +1,7 @@
 from logging import info, warning
 import os
 import spacy
-from torchtext.legacy.data.field import Field
+from torchtext.legacy.data import Field
 from spacy.language import Language
 from typing import Tuple
 
@@ -19,7 +19,7 @@ def _load_lang(lang):
         return spacy.load(lang)
     
 
-def tokenizer_from(src_lang: str, tgt_lang: str) -> Tuple[Field]:
+def tokenizer_from(src_lang: str, tgt_lang: str):
     src_lang = _load_lang(src_lang)
     tgt_lang = _load_lang(tgt_lang)
 
